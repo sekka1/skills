@@ -238,6 +238,16 @@ export async function setStore(
     await screenshot(page, 'step8-done');
     console.log('  ✅ "Set as my store" clicked!');
 
+    // ── Step 8a: Close the store selection modal ───────────────────────────
+    console.log('Step 8a: Closing store selection modal...');
+    await sleep(1000); // wait for store to be set
+
+    // Try to close the modal by pressing Escape
+    await page.keyboard.press('Escape');
+    await sleep(1000);
+    await screenshot(page, 'step8a-modal-closed');
+    console.log('  ✅ Modal closed with Escape key');
+
     // ── Step 8b: Click "Shop this store" in map popup ──────────────────────
     console.log('Step 8b: Clicking "Shop this store" in map popup ...');
     await sleep(2000); // wait for map popup to fully render
