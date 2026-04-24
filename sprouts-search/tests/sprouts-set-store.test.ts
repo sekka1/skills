@@ -21,6 +21,20 @@ describe('parseStoreNumber', () => {
     expect(parseStoreNumber('In-Store · Cudahy (Store #467)')).toBe('467');
   });
 
+  it('extracts store number from parentheses format', () => {
+    expect(parseStoreNumber('In-Store · Location (#449)')).toBe('449');
+  });
+
+  it('extracts store number from standalone hash format', () => {
+    expect(parseStoreNumber('Store location #558')).toBe('558');
+  });
+
+  it('ignores single or double digit numbers', () => {
+    // Should not match single digit "2" in button text
+    expect(parseStoreNumber('In-Store 2 items')).toBeNull();
+    expect(parseStoreNumber('Select option #2')).toBeNull();
+  });
+
   it('returns null when no store number present', () => {
     expect(parseStoreNumber('Change store')).toBeNull();
     expect(parseStoreNumber('')).toBeNull();

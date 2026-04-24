@@ -85,8 +85,25 @@ export async function mouseClick(page: Page, rect: Rect): Promise<void> {
 
 /** Parse store number from button text like "In-Store · Las Vegas - Centennial (Store #506)" */
 export function parseStoreNumber(buttonText: string): string | null {
-  const match = buttonText.match(/Store #(\d+)/i);
-  return match ? match[1] : null;
+  // Try to match "Store #XXX" or "Store# XXX" or "#XXX" at the end
+  const patterns = [
+    /Store\s*#\s*(\d+)/i,           // "Store #506" or "Store# 506"
+    /\(#(\d+)\)/,                   // "(#506)"
+    /#(\d{3,4})\b/,                 // "#506" (3-4 digits to avoid matching single/double digit numbers)
+  ];
+
+  for (const pattern of patterns) {
+    const match = buttonText.match(pattern);
+    if (match && match[1]) {
+      // Verify it's a reasonable store number (3-4 digits)
+      const storeNum = match[1];
+      if (storeNum.length >= 3 && storeNum.length <= 4) {
+        return storeNum;
+      }
+    }
+  }
+
+  return null;
 }
 
 /** Parse store name from button text */
