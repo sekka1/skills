@@ -292,11 +292,22 @@ export async function setStore(
 
     // ── Verify ─────────────────────────────────────────────────────────────
     const finalButtonText: string = await page.evaluate(
-      () =>
-        Array.from(document.querySelectorAll<HTMLElement>('button'))
-          .find(b => /in-?store/i.test(b.textContent ?? ''))
-          ?.textContent?.replace(/\s+/g, ' ')
-          .trim() ?? '(check screenshot)'
+      () => {
+        // Find all buttons with "in-store" text
+        const buttons = Array.from(document.querySelectorAll<HTMLElement>('button'))
+          .filter(b => /in-?store/i.test(b.textContent ?? ''));
+
+        // Prefer a button that contains store information (store number or store name)
+        const buttonWithStore = buttons.find(b => {
+          const text = b.textContent ?? '';
+          return /#\d{3,4}/.test(text) || /Store\s*#/i.test(text) || /\(.+?\)/.test(text);
+        });
+
+        // Fall back to first button with "in-store" text
+        const targetButton = buttonWithStore ?? buttons[0];
+
+        return targetButton?.textContent?.replace(/\s+/g, ' ').trim() ?? '(check screenshot)';
+      }
     );
 
     const result: StoreResult = {
