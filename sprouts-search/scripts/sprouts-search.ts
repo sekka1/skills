@@ -63,7 +63,7 @@ export async function searchItems(page: Page, searchTerm: string): Promise<Produ
 
   // React synthetic event trigger: nativeInputValueSetter forces React to recognize the value.
   // page.keyboard.type() does NOT update React state — the search query stays empty.
-  await page.evaluate((term: string) => {
+  await page.evaluate(({ term }) => {
     const input = document.querySelector<HTMLInputElement>('#search-bar-input');
     if (!input) return;
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
@@ -71,7 +71,7 @@ export async function searchItems(page: Page, searchTerm: string): Promise<Produ
       setter.call(input, term);
       input.dispatchEvent(new Event('input', { bubbles: true }));
     }
-  }, searchTerm);
+  }, { term: searchTerm });
 
   await sleep(2000);
   console.log(`  ✅ Set "${searchTerm}" via React input setter`);

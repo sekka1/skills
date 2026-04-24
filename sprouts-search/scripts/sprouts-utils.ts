@@ -32,7 +32,7 @@ export async function findByText(
   selector = 'button, a, [role="button"], span'
 ): Promise<Rect | null> {
   return page.evaluate(
-    (src: string, sel: string): Rect | null => {
+    ({ src, sel }): Rect | null => {
       const re = new RegExp(src, 'i');
       const els = Array.from(document.querySelectorAll<HTMLElement>(sel));
       const el = els.find(e => re.test(e.textContent ?? ''));
@@ -45,8 +45,7 @@ export async function findByText(
         text: el.textContent?.replace(/\s+/g, ' ').trim().substring(0, 100) ?? '',
       };
     },
-    pattern.source,
-    selector
+    { src: pattern.source, sel: selector }
   );
 }
 
@@ -57,7 +56,7 @@ export async function findLastByText(
   selector = 'button, a, [role="button"], span'
 ): Promise<Rect | null> {
   return page.evaluate(
-    (src: string, sel: string): Rect | null => {
+    ({ src, sel }): Rect | null => {
       const re = new RegExp(src, 'i');
       const els = Array.from(document.querySelectorAll<HTMLElement>(sel)).filter(e =>
         re.test(e.textContent ?? '')
@@ -72,8 +71,7 @@ export async function findLastByText(
         text: el.textContent?.replace(/\s+/g, ' ').trim().substring(0, 100) ?? '',
       };
     },
-    pattern.source,
-    selector
+    { src: pattern.source, sel: selector }
   );
 }
 

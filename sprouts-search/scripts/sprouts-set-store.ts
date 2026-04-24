@@ -246,7 +246,7 @@ export async function setStore(
     );
     console.log('  Stores available:', stores.slice(0, 5));
 
-    const rect8 = await page.evaluate((targetStoreNum: string | null): { x: number; y: number; text: string } | null => {
+    const rect8 = await page.evaluate(({ targetStoreNum }): { x: number; y: number; text: string } | null => {
       const btns = Array.from(document.querySelectorAll<HTMLElement>('button')).filter(b =>
         /set as my store/i.test(b.textContent ?? '')
       );
@@ -280,7 +280,7 @@ export async function setStore(
       target.scrollIntoView({ behavior: 'instant', block: 'center' });
       const r = target.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: target.textContent?.trim() ?? '' };
-    }, storeNum);
+    }, { targetStoreNum: storeNum });
 
     // ── Step 7a: If target store not found, search for it ──────────────────
     if (storeNum && !rect8) {
@@ -293,7 +293,7 @@ export async function setStore(
     await sleep(500); // let scrollIntoView settle before clicking
 
     // Use synthetic events to trigger React onClick handler (garbot recommendation)
-    const clicked = await page.evaluate((targetStoreNum: string | null): boolean => {
+    const clicked = await page.evaluate(({ targetStoreNum }): boolean => {
       const btns = Array.from(document.querySelectorAll<HTMLElement>('button')).filter(b =>
         /set as my store/i.test(b.textContent ?? '')
       );
@@ -327,7 +327,7 @@ export async function setStore(
       target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
       target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       return true;
-    }, storeNum);
+    }, { targetStoreNum: storeNum });
 
     if (!clicked) throw new Error('Failed to click "Set as my store" button');
 
@@ -436,14 +436,14 @@ export async function setStore(
         page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null),
         // Or wait for the store button text to change from the old store
         page.waitForFunction(
-          (oldStoreNum: string) => {
+          ({ oldStoreNum }) => {
             const buttons = Array.from(document.querySelectorAll('button'));
             const storeButton = buttons.find(b => /in-?store/i.test(b.textContent ?? ''));
             const text = storeButton?.textContent ?? '';
             // Check if button text no longer contains the old store number
             return !text.includes(`#${oldStoreNum}`);
           },
-          '8', // Phoenix - Indian School Rd. is Store #8 (the default)
+          { oldStoreNum: '8' }, // Phoenix - Indian School Rd. is Store #8 (the default)
           { timeout: 5000 }
         ).catch(() => null)
       ]);
