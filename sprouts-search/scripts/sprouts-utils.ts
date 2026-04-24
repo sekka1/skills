@@ -1,0 +1,96 @@
+/**
+ * sprouts-utils.ts
+ *
+ * Shared helpers for Sprouts browser automation scripts.
+ * All page interactions use real mouse events (getBoundingClientRect + page.mouse.click)
+ * because Sprouts uses React synthetic events that ignore .click() and element.click().
+ */
+
+import { Page } from 'puppeteer-core';
+import * as path from 'path';
+
+export const SLEEP_MS = 10_000;
+export const SCREENSHOT_DIR = path.join(__dirname);
+
+export interface Rect {
+  x: number;
+  y: number;
+  text: string;
+}
+
+export const sleep = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));
+
+export async function screenshot(page: Page, name: string): Promise<void> {
+  const p = path.join(SCREENSHOT_DIR, `sprouts-debug-${name}.png`);
+  await page.screenshot({ path: p }).catch(() => {});
+  console.log(`  📸 ${name}`);
+}
+
+/** Find a button/link/element by text pattern and return its center coords. */
+export async function findByText(
+  page: Page,
+  pattern: RegExp,
+  selector = 'button, a, [role="button"], span'
+): Promise<Rect | null> {
+  return page.evaluate(
+    (src: string, sel: string): Rect | null => {
+      const re = new RegExp(src, 'i');
+      const els = Array.from(document.querySelectorAll<HTMLElement>(sel));
+      const el = els.find(e => re.test(e.textContent ?? ''));
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) return null;
+      return {
+        x: r.left + r.width / 2,
+        y: r.top + r.height / 2,
+        text: el.textContent?.replace(/\s+/g, ' ').trim().substring(0, 100) ?? '',
+      };
+    },
+    pattern.source,
+    selector
+  );
+}
+
+/** Find the LAST element matching a text pattern (useful for multi-row modals). */
+export async function findLastByText(
+  page: Page,
+  pattern: RegExp,
+  selector = 'button, a, [role="button"], span'
+): Promise<Rect | null> {
+  return page.evaluate(
+    (src: string, sel: string): Rect | null => {
+      const re = new RegExp(src, 'i');
+      const els = Array.from(document.querySelectorAll<HTMLElement>(sel)).filter(e =>
+        re.test(e.textContent ?? '')
+      );
+      const el = els[els.length - 1] ?? null;
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) return null;
+      return {
+        x: r.left + r.width / 2,
+        y: r.top + r.height / 2,
+        text: el.textContent?.replace(/\s+/g, ' ').trim().substring(0, 100) ?? '',
+      };
+    },
+    pattern.source,
+    selector
+  );
+}
+
+/** Click at element center using real mouse event. */
+export async function mouseClick(page: Page, rect: Rect): Promise<void> {
+  await page.mouse.click(rect.x, rect.y);
+}
+
+/** Parse store number from button text like "In-Store · Las Vegas - Centennial (Store #506)" */
+export function parseStoreNumber(buttonText: string): string | null {
+  const match = buttonText.match(/Store #(\d+)/i);
+  return match ? match[1] : null;
+}
+
+/** Parse store name from button text */
+export function parseStoreName(buttonText: string): string | null {
+  const match = buttonText.match(/In-?Store\s*[·•]\s*(.+?)\s*\(Store #/i);
+  return match ? match[1].trim() : null;
+}

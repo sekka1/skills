@@ -1,0 +1,339 @@
+/**
+ * sprouts-set-store.ts
+ *
+ * puppeteer-core + CDP: Connect to existing Chrome and set a Sprouts in-store location.
+ *
+ * Usage:
+ *   npx ts-node scripts/sprouts-set-store.ts [address] [storeNumber]
+ *
+ * Example:
+ *   npx ts-node scripts/sprouts-set-store.ts "6720 N DURANGO DR, LAS VEGAS, NV" "506"
+ *
+ * Requirements:
+ *   Chrome running with: chrome.exe --remote-debugging-port=9222
+ */
+
+import puppeteer, { Browser, Page } from 'puppeteer-core';
+import { sleep, screenshot, findByText, findLastByText, mouseClick, parseStoreNumber, parseStoreName, SLEEP_MS } from './sprouts-utils';
+
+export interface StoreResult {
+  storeNum: string | null;
+  storeName: string | null;
+  buttonText: string;
+}
+
+export { parseStoreNumber, parseStoreName };
+
+/**
+ * Set the active Sprouts in-store location via CDP to an existing Chrome instance.
+ * @param address  Street address to find stores near
+ * @param storeNum Optional store number to select (picks first result if omitted)
+ * @returns StoreResult with the confirmed store info
+ */
+export async function setStore(
+  address: string,
+  storeNum: string | null = null,
+  page?: Page
+): Promise<StoreResult> {
+  let browser: Browser | undefined;
+  let ownedPage = false;
+
+  try {
+    if (!page) {
+      browser = await puppeteer.connect({
+        browserURL: 'http://localhost:9222',
+        defaultViewport: null,
+      });
+      page = await browser.newPage();
+      await page.setViewport({ width: 1280, height: 900 });
+      ownedPage = true;
+    }
+
+    // ── Step 1: Navigate ───────────────────────────────────────────────────
+    console.log('Step 1: Navigating to shop.sprouts.com ...');
+    await page.goto('https://shop.sprouts.com', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await sleep(SLEEP_MS);
+    console.log('  ✅', page.url());
+
+    // ── Step 2: Click store mode button ────────────────────────────────────
+    console.log('Step 2: Clicking store mode button ...');
+    await page.waitForFunction(
+      () => Array.from(document.querySelectorAll('button')).some(b => /in-?store/i.test(b.textContent ?? '')),
+      { timeout: 20_000 }
+    );
+
+    const rect2 = await page.evaluate((): { x: number; y: number; text: string } | null => {
+      const btn = Array.from(document.querySelectorAll<HTMLElement>('button')).find(b =>
+        /in-?store/i.test(b.textContent ?? '')
+      );
+      if (!btn) return null;
+      const r = btn.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) return null;
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: btn.textContent?.replace(/\s+/g, ' ').trim().substring(0, 80) ?? '' };
+    });
+    if (!rect2) throw new Error('Store mode button not found');
+    console.log(`  Clicking: "${rect2.text}"`);
+    await page.mouse.click(rect2.x, rect2.y);
+    await sleep(SLEEP_MS);
+    await screenshot(page, 'step2-dropdown');
+    console.log('  ✅ Dropdown opened');
+
+    // ── Step 3: Click "Change store" in the In-Store row ───────────────────
+    console.log('Step 3: Clicking "Change store" (In-Store row) ...');
+    await page.waitForFunction(
+      () =>
+        Array.from(document.querySelectorAll('a, button, span')).some(
+          el => el.textContent?.trim() === 'Change store'
+        ),
+      { timeout: 15_000 }
+    );
+
+    const rect3 = await findLastByText(page, /^change store$/i, 'a, button, span');
+    if (!rect3) throw new Error('"Change store" not found');
+    console.log(`  Clicking at (${Math.round(rect3.x)}, ${Math.round(rect3.y)})`);
+    await mouseClick(page, rect3);
+    await sleep(SLEEP_MS);
+    await screenshot(page, 'step3-location-modal');
+    console.log('  ✅ Location modal open');
+
+    // ── Step 4: Click "Near ..." button ────────────────────────────────────
+    console.log('Step 4: Clicking "Near ..." button ...');
+    await page.waitForFunction(
+      () => Array.from(document.querySelectorAll('button')).some(b => /near/i.test(b.textContent ?? '')),
+      { timeout: 15_000 }
+    );
+
+    const rect4 = await findByText(page, /near/i, 'button');
+    if (!rect4) throw new Error('"Near" button not found');
+    console.log(`  Clicking: "${rect4.text}"`);
+    await mouseClick(page, rect4);
+    await sleep(SLEEP_MS);
+    await screenshot(page, 'step4-address-input');
+    console.log('  ✅ Address input opened');
+
+    // ── Step 5: Type address ───────────────────────────────────────────────
+    console.log(`Step 5: Typing address "${address}" ...`);
+    await page.waitForSelector('input', { timeout: 10_000 });
+
+    const rect5 = await page.evaluate((): { x: number; y: number; text: string } | null => {
+      const input = document.querySelector<HTMLInputElement>(
+        'input[type="text"], input[type="search"], input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="button"])'
+      );
+      if (!input) return null;
+      const r = input.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: '' };
+    });
+    if (rect5) await page.mouse.click(rect5.x, rect5.y);
+    await page.keyboard.down('Control');
+    await page.keyboard.press('a');
+    await page.keyboard.up('Control');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type(address, { delay: 60 });
+    await sleep(SLEEP_MS);
+    await screenshot(page, 'step5-typed');
+    console.log('  ✅ Address typed');
+
+    // ── Step 6: Select autocomplete suggestion ─────────────────────────────
+    console.log('Step 6: Selecting autocomplete suggestion ...');
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll('[role="option"]').length > 0 ||
+        document.querySelectorAll('[role="listbox"] li').length > 0,
+      { timeout: 10_000 }
+    );
+
+    const rect6 = await page.evaluate((): { x: number; y: number; text: string } | null => {
+      const opt =
+        document.querySelector<HTMLElement>('[role="option"]') ??
+        document.querySelector<HTMLElement>('[role="listbox"] li');
+      if (!opt) return null;
+      const r = opt.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: opt.textContent?.replace(/\s+/g, ' ').trim().substring(0, 80) ?? '' };
+    });
+    if (!rect6) throw new Error('No autocomplete suggestion found');
+    console.log(`  Clicking: "${rect6.text}"`);
+    await page.mouse.click(rect6.x, rect6.y);
+    await sleep(SLEEP_MS);
+    await screenshot(page, 'step6-suggestion');
+    console.log('  ✅ Suggestion selected');
+
+    // ── Step 7: Click "Save Address" ───────────────────────────────────────
+    console.log('Step 7: Clicking "Save Address" ...');
+    await page.waitForFunction(
+      () => Array.from(document.querySelectorAll('button')).some(b => /save address/i.test(b.textContent ?? '')),
+      { timeout: 10_000 }
+    );
+
+    const rect7 = await findByText(page, /save address/i, 'button');
+    if (!rect7) throw new Error('"Save Address" not found');
+    console.log(`  Clicking: "${rect7.text}"`);
+    await mouseClick(page, rect7);
+    await sleep(SLEEP_MS);
+    await screenshot(page, 'step7-store-list');
+    console.log('  ✅ Address saved');
+
+    // ── Step 8: Click "Set as my store" ────────────────────────────────────
+    console.log(`Step 8: Setting store ${storeNum ? '#' + storeNum : '(first)'}...`);
+    await page.waitForFunction(
+      () => Array.from(document.querySelectorAll('button')).some(b => /set as my store/i.test(b.textContent ?? '')),
+      { timeout: 15_000 }
+    );
+
+    const stores: string[] = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>('button'))
+        .filter(b => /set as my store/i.test(b.textContent ?? ''))
+        .map(btn => {
+          let el: HTMLElement | null = btn;
+          for (let i = 0; i < 8; i++) {
+            el = el?.parentElement ?? null;
+            if (!el) break;
+            const t = el.textContent?.replace(/\s+/g, ' ').trim();
+            if (t && t.length > 15 && t.length < 200) return t.substring(0, 100);
+          }
+          return '?';
+        })
+    );
+    console.log('  Stores available:', stores.slice(0, 5));
+
+    const rect8 = await page.evaluate((targetStoreNum: string | null): { x: number; y: number; text: string } | null => {
+      const btns = Array.from(document.querySelectorAll<HTMLElement>('button')).filter(b =>
+        /set as my store/i.test(b.textContent ?? '')
+      );
+      let target: HTMLElement | null = null;
+      if (targetStoreNum) {
+        for (const btn of btns) {
+          // Walk up looking for the CLOSEST ancestor that contains this store number
+          // but STOP before reaching a container that mentions multiple store numbers
+          let el: HTMLElement | null = btn.parentElement;
+          for (let i = 0; i < 15; i++) {
+            if (!el) break;
+            const t = el.textContent ?? '';
+            const storeMatches = (t.match(/Store #\d+/g) ?? []);
+            // Found a node that mentions our store number
+            if (t.includes(`#${targetStoreNum}`)) {
+              // Only use it if it doesn't also mention OTHER store numbers (avoid container with all stores)
+              const otherStores = storeMatches.filter(m => !m.includes(targetStoreNum));
+              if (otherStores.length === 0) {
+                target = btn;
+                break;
+              }
+            }
+            el = el.parentElement;
+          }
+          if (target) break;
+        }
+      }
+      if (!target) target = btns[0] ?? null;
+      if (!target) return null;
+      // Scroll into view before reading coords — prevents clicking off-screen store
+      target.scrollIntoView({ behavior: 'instant', block: 'center' });
+      const r = target.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: target.textContent?.trim() ?? '' };
+    }, storeNum);
+
+    if (!rect8) throw new Error('"Set as my store" button not found');
+    await sleep(500); // let scrollIntoView settle before clicking
+    await page.mouse.click(rect8.x, rect8.y);
+    await sleep(SLEEP_MS);
+    await screenshot(page, 'step8-done');
+    console.log('  ✅ "Set as my store" clicked!');
+
+    // ── Step 8b: Click "Shop this store" in map popup ──────────────────────
+    console.log('Step 8b: Clicking "Shop this store" in map popup ...');
+    await sleep(2000); // wait for map popup to fully render
+    // The "Shop this store" button is in a React portal/overlay that getBoundingClientRect()
+    // returns zero for. Use offsetParent chain for absolute position.
+    const rect8bInfo = await page.evaluate(() => {
+      const allEls = Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'));
+      const btn = allEls.find(b => /shop this store/i.test(b.textContent ?? ''));
+      if (!btn) return null;
+      // Try getBoundingClientRect first
+      const bcr = btn.getBoundingClientRect();
+      if (bcr.width > 0 && bcr.height > 0) {
+        return { x: bcr.left + bcr.width / 2, y: bcr.top + bcr.height / 2, method: 'bcr' };
+      }
+      // Walk offsetParent chain
+      let x = btn.offsetWidth / 2;
+      let y = btn.offsetHeight / 2;
+      let el: HTMLElement | null = btn;
+      while (el) {
+        x += el.offsetLeft;
+        y += el.offsetTop;
+        el = el.offsetParent as HTMLElement | null;
+      }
+      if (x > 0 && y > 0 && x < 2000 && y < 2000) {
+        return { x, y, method: 'offset' };
+      }
+      return { x: -1, y: -1, found: true, method: 'found-but-no-coords' };
+    });
+
+    if (rect8bInfo && rect8bInfo.x > 0 && rect8bInfo.y > 0) {
+      console.log(`  Clicking: "Shop this store" at (${Math.round(rect8bInfo.x)}, ${Math.round(rect8bInfo.y)}) via ${rect8bInfo.method}`);
+      await page.mouse.click(rect8bInfo.x, rect8bInfo.y);
+      await sleep(SLEEP_MS);
+      await screenshot(page, 'step8b-final');
+      console.log('  ✅ "Shop this store" clicked — store set!');
+    } else if (rect8bInfo?.found) {
+      // Button found but couldn't get usable coordinates — try clicking center of right panel
+      // (map popup consistently appears in right ~60% of the viewport)
+      console.log('  ⚠️  Button found but no usable coordinates — trying viewport-based click');
+      // Screenshot to find exact position visually
+      await screenshot(page, 'step8b-before-fallback');
+      // Based on observed screenshots (1204x851 screenshot = 1280x900 viewport):
+      // Button appears at ~786x617 in screenshot, scaled to ~836x652 in viewport
+      await page.mouse.click(836, 652);
+      await sleep(SLEEP_MS);
+      await screenshot(page, 'step8b-fallback');
+      console.log('  ✅ Fallback click at (786, 617)');
+    } else {
+      console.log('  ℹ️  No "Shop this store" popup found (store may already be set)');
+      await screenshot(page, 'step8b-skipped');
+    }
+
+    // ── Verify ─────────────────────────────────────────────────────────────
+    const finalButtonText: string = await page.evaluate(
+      () =>
+        Array.from(document.querySelectorAll<HTMLElement>('button'))
+          .find(b => /in-?store/i.test(b.textContent ?? '') && /store #/i.test(b.textContent ?? ''))
+          ?.textContent?.replace(/\s+/g, ' ')
+          .trim() ?? '(check screenshot)'
+    );
+
+    const result: StoreResult = {
+      storeNum: parseStoreNumber(finalButtonText),
+      storeName: parseStoreName(finalButtonText),
+      buttonText: finalButtonText,
+    };
+
+    console.log(`\n✅ Done! Store button: "${finalButtonText}"`);
+    if (storeNum && result.storeNum === storeNum) {
+      console.log(`✅ Confirmed Store #${storeNum} is active`);
+    } else if (storeNum) {
+      console.log(`⚠️  Could not confirm store #${storeNum} — check screenshot`);
+    }
+
+    return result;
+
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    console.error('\n❌ Error:', error.message);
+    throw error;
+  } finally {
+    if (ownedPage) {
+      await browser?.disconnect();
+      console.log('   Browser left open.');
+    }
+  }
+}
+
+// ── CLI entry point ──────────────────────────────────────────────────────────
+if (require.main === module) {
+  const address = process.argv[2] ?? '6720 N DURANGO DR, LAS VEGAS, NV';
+  const storeNum = process.argv[3] ?? null;
+
+  console.log(`\n🛒 Sprouts Store Selector`);
+  console.log(`   Address: ${address}`);
+  console.log(`   Store #: ${storeNum ?? '(nearest)'}\n`);
+
+  setStore(address, storeNum).catch(() => process.exit(1));
+}

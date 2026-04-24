@@ -1,0 +1,97 @@
+name: Sprouts Search CI
+
+on:
+  pull_request:
+    paths:
+      - 'sprouts-search/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'sprouts-search/**'
+
+jobs:
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sprouts-search
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sprouts-search/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run type checking
+        run: npm run typecheck
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Generate coverage report
+        run: npm run test:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          directory: sprouts-search/coverage
+          flags: sprouts-search
+          fail_ci_if_error: false
+
+  integration-test:
+    name: Integration Test (E2E)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sprouts-search
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sprouts-search/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chrome
+        run: |
+          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Start Chrome with remote debugging
+        run: |
+          google-chrome-stable --remote-debugging-port=9222 --headless --no-sandbox --disable-gpu --disable-dev-shm-usage &
+          sleep 5
+
+      - name: Run integration tests
+        run: npm run test:integration
+        timeout-minutes: 10
+
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-screenshots
+          path: sprouts-search/sprouts-debug-*.png
+          if-no-files-found: ignore
