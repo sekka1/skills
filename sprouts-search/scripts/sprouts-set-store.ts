@@ -307,7 +307,39 @@ export async function setStore(
       await screenshot(page, 'step8b-skipped');
     }
 
+    // ── Step 9: Wait for page to update/reload after store selection ───────
+    console.log('Step 9: Waiting for page to update with new store selection...');
+
+    // Wait for either navigation or the store button to update
+    try {
+      await Promise.race([
+        // Wait for navigation (page reload)
+        page.waitForNavigation({ timeout: 5000, waitUntil: 'networkidle0' }).catch(() => null),
+        // Or wait for the store button text to change from the old store
+        page.waitForFunction(
+          (oldStoreNum: string) => {
+            const buttons = Array.from(document.querySelectorAll('button'));
+            const storeButton = buttons.find(b => /in-?store/i.test(b.textContent ?? ''));
+            const text = storeButton?.textContent ?? '';
+            // Check if button text no longer contains the old store number
+            return !text.includes(`#${oldStoreNum}`);
+          },
+          { timeout: 5000 },
+          '8' // Phoenix - Indian School Rd. is Store #8 (the default)
+        ).catch(() => null)
+      ]);
+    } catch (err) {
+      // If both timeout, continue anyway - we'll verify below
+      console.log('  ⚠️  Page update detection timed out - proceeding to verification');
+    }
+
+    // Additional wait to ensure DOM is fully updated
+    await sleep(2000);
+    await screenshot(page, 'step9-page-updated');
+    console.log('  ✅ Page update wait complete');
+
     // ── Verify ─────────────────────────────────────────────────────────────
+    console.log('Step 10: Verifying store selection...');
     const storeInfo = await page.evaluate(
       () => {
         // Find all buttons with "in-store" text
