@@ -1,7 +1,7 @@
 /**
  * sprouts-set-store.ts
  *
- * puppeteer-core + CDP: Connect to existing Chrome and set a Sprouts in-store location.
+ * playwright-core + CDP: Connect to existing Chrome and set a Sprouts in-store location.
  *
  * Usage:
  *   npx ts-node scripts/sprouts-set-store.ts [address] [storeNumber]
@@ -13,7 +13,7 @@
  *   Chrome running with: chrome.exe --remote-debugging-port=9222
  */
 
-import puppeteer, { Browser, Page } from 'puppeteer-core';
+import { chromium, Browser, Page } from 'playwright-core';
 import { sleep, screenshot, findByText, findLastByText, mouseClick, parseStoreNumber, parseStoreName, SLEEP_MS } from './sprouts-utils';
 
 export interface StoreResult {
@@ -40,12 +40,11 @@ export async function setStore(
 
   try {
     if (!page) {
-      browser = await puppeteer.connect({
-        browserURL: 'http://localhost:9222',
-        defaultViewport: null,
-      });
-      page = await browser.newPage();
-      await page.setViewport({ width: 1280, height: 900 });
+      browser = await chromium.connectOverCDP('http://localhost:9222');
+      const contexts = browser.contexts();
+      const context = contexts[0] || await browser.newContext({ viewport: { width: 1280, height: 900 } });
+      page = context.pages()[0] || await context.newPage();
+      await page.setViewportSize({ width: 1280, height: 900 });
       ownedPage = true;
     }
 
@@ -178,9 +177,7 @@ export async function setStore(
       return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: '' };
     });
     if (rect5) await page.mouse.click(rect5.x, rect5.y);
-    await page.keyboard.down('Control');
-    await page.keyboard.press('a');
-    await page.keyboard.up('Control');
+    await page.keyboard.press('Control+a');
     await page.keyboard.press('Backspace');
     await page.keyboard.type(address, { delay: 60 });
     await sleep(SLEEP_MS);
@@ -436,7 +433,7 @@ export async function setStore(
     try {
       await Promise.race([
         // Wait for navigation (page reload)
-        page.waitForNavigation({ timeout: 5000, waitUntil: 'networkidle0' }).catch(() => null),
+        page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => null),
         // Or wait for the store button text to change from the old store
         page.waitForFunction(
           (oldStoreNum: string) => {
@@ -446,8 +443,8 @@ export async function setStore(
             // Check if button text no longer contains the old store number
             return !text.includes(`#${oldStoreNum}`);
           },
-          { timeout: 5000 },
-          '8' // Phoenix - Indian School Rd. is Store #8 (the default)
+          '8', // Phoenix - Indian School Rd. is Store #8 (the default)
+          { timeout: 5000 }
         ).catch(() => null)
       ]);
     } catch {
@@ -536,9 +533,9 @@ export async function setStore(
     console.error('\n❌ Error:', error.message);
     throw error;
   } finally {
-    if (ownedPage) {
-      await browser?.disconnect();
-      console.log('   Browser left open.');
+    if (ownedPage && browser) {
+      await browser.close();
+      console.log('   Browser closed.');
     }
   }
 }

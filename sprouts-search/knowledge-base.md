@@ -2,6 +2,33 @@
 
 This document captures findings, edge cases, and behavioral patterns observed when automating the Sprouts Farmers Market website.
 
+## Migration to Playwright (2026-04-24)
+
+**Action Taken:** Migrated from puppeteer-core to playwright-core based on garbot's recommendation #2.
+
+**Rationale:**
+- Playwright has native React/Angular event synthesis support
+- Eliminates the need for custom synthetic event dispatch sequences
+- Drop-in compatible with CDP approach (connects via `chromium.connectOverCDP()`)
+- Better handling of React synthetic events out of the box
+
+**Changes Made:**
+1. Updated package.json: `puppeteer-core` → `playwright-core ^1.49.0`
+2. Updated all TypeScript files to use Playwright API:
+   - `import { chromium, Browser, Page } from 'playwright-core'`
+   - `chromium.connectOverCDP('http://localhost:9222')` instead of `puppeteer.connect()`
+   - `page.setViewportSize()` instead of `page.setViewport()`
+   - `page.keyboard.press('Control+a')` instead of separate down/up calls
+   - `page.waitForLoadState('networkidle')` instead of `waitForNavigation({ waitUntil: 'networkidle0' })`
+   - `browser.close()` instead of `browser.disconnect()`
+3. All unit tests still pass (13 tests)
+4. Lint passes with no errors
+
+**Testing Status:**
+- ✅ Unit tests: All 13 passing
+- ✅ Lint: No errors
+- ⏸️  Integration tests: Require Chrome with CDP (port 9222) - test locally
+
 ## Critical Findings (Updated with Garbot Analysis)
 
 ### Issue #1: "How would you like to shop?" Onboarding Modal (PRIMARY BLOCKER)
@@ -34,13 +61,14 @@ This document captures findings, edge cases, and behavioral patterns observed wh
 - React components may not be in the composed event path
 
 **Fix Implemented:**
-- Use sequence of synthetic PointerEvent + MouseEvent dispatches
-- Full sequence: pointerdown → mousedown → pointerup → mouseup → click
-- All events use `bubbles: true` to propagate through React's event system
+- Migrated to playwright-core (2026-04-24) which has native React event synthesis
+- Playwright properly triggers React synthetic events without manual PointerEvent/MouseEvent sequences
+- Legacy fix (PointerEvent sequence) no longer needed with Playwright
 
-**Alternative (Not Implemented):**
-- Switch from puppeteer-core to playwright-core
-- Playwright has better React/Angular support with proper event synthesis
+**Previous Fix (Puppeteer):**
+- Used sequence of synthetic PointerEvent + MouseEvent dispatches
+- Full sequence: pointerdown → mousedown → pointerup → mouseup → click
+- All events used `bubbles: true` to propagate through React's event system
 
 ### Issue #3: "Shop this store" Map Popup Unreliable in Headless
 
@@ -154,14 +182,16 @@ When first visiting the site, it defaults to:
 ### Implemented Fixes (Based on Garbot Analysis)
 
 ✅ **Step 0:** Handle onboarding modal on fresh sessions
-✅ **Synthetic Events:** Use PointerEvent + MouseEvent sequence for React
+✅ **Playwright Migration:** Migrated to playwright-core for better React support (2026-04-24)
 ✅ **Optional Map Popup:** Don't fail if "Shop this store" missing
 ✅ **Storage Verification:** Check localStorage/cookies for store data
 ⬜ **Browser Isolation:** Consider `--user-data-dir` for clean state per test
-⬜ **Playwright Migration:** Consider switching to playwright-core for better React support
+
+**Deprecated (replaced by Playwright):**
+~~**Synthetic Events:** Use PointerEvent + MouseEvent sequence for React~~ - No longer needed with Playwright
 
 ---
 
 **Last Updated:** 2026-04-24
-**Status:** Fixes implemented based on garbot's root cause analysis
-**Credits:** Root cause analysis by garbot
+**Status:** Migrated to Playwright; all unit tests passing
+**Credits:** Root cause analysis by garbot, Playwright migration per garbot recommendation #2

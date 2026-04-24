@@ -23,7 +23,7 @@
  *   - Availability: aria-disabled="true" on the card link = unavailable
  */
 
-import puppeteer, { Browser, Page } from 'puppeteer-core';
+import { chromium, Browser, Page } from 'playwright-core';
 import * as fs from 'fs';
 import * as path from 'path';
 import { sleep, screenshot } from './sprouts-utils';
@@ -146,13 +146,11 @@ export async function searchAtStore(
   let browser: Browser | undefined;
 
   try {
-    browser = await puppeteer.connect({
-      browserURL: 'http://localhost:9222',
-      defaultViewport: null,
-    });
-
-    const page: Page = await browser.newPage();
-    await page.setViewport({ width: 1280, height: 900 });
+    browser = await chromium.connectOverCDP('http://localhost:9222');
+    const contexts = browser.contexts();
+    const context = contexts[0] || await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const page: Page = context.pages()[0] || await context.newPage();
+    await page.setViewportSize({ width: 1280, height: 900 });
 
     const storeResult = await setStore(address, storeNum, page);
     const products = await searchItems(page, searchTerm);
@@ -171,8 +169,10 @@ export async function searchAtStore(
     console.error('\n❌ Error:', error.message);
     throw error;
   } finally {
-    await browser?.disconnect();
-    console.log('   Browser left open.');
+    if (browser) {
+      await browser.close();
+      console.log('   Browser closed.');
+    }
   }
 }
 

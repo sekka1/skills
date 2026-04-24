@@ -2,11 +2,10 @@
  * sprouts-utils.ts
  *
  * Shared helpers for Sprouts browser automation scripts.
- * All page interactions use real mouse events (getBoundingClientRect + page.mouse.click)
- * because Sprouts uses React synthetic events that ignore .click() and element.click().
+ * Uses Playwright for better React/Angular event synthesis.
  */
 
-import { Page } from 'puppeteer-core';
+import { Page } from 'playwright-core';
 import * as path from 'path';
 
 export const SLEEP_MS = 10_000;
@@ -78,7 +77,7 @@ export async function findLastByText(
   );
 }
 
-/** Click at element center using real mouse event. */
+/** Click at element center using Playwright's native click (properly handles React events). */
 export async function mouseClick(page: Page, rect: Rect): Promise<void> {
   await page.mouse.click(rect.x, rect.y);
 }
