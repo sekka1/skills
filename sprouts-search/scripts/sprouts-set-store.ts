@@ -14,6 +14,8 @@
  */
 
 import { chromium, Browser, Page } from 'playwright-core';
+import * as fs from 'fs';
+import * as path from 'path';
 import { sleep, screenshot, findByText, findLastByText, mouseClick, parseStoreNumber, parseStoreName, SLEEP_MS } from './sprouts-utils';
 
 export interface StoreResult {
@@ -46,6 +48,21 @@ export async function setStore(
       page = context.pages()[0] || await context.newPage();
       await page.setViewportSize({ width: 1280, height: 900 });
       ownedPage = true;
+    }
+
+    // ── Step 0a: Load cookies to suppress onboarding modal ─────────────────
+    console.log('Step 0a: Loading cookies to suppress onboarding modal...');
+    try {
+      const cookiesPath = path.join(__dirname, '..', 'tests', 'fixtures', 'sprouts-cookies.json');
+      if (fs.existsSync(cookiesPath)) {
+        const cookies = JSON.parse(fs.readFileSync(cookiesPath, 'utf-8'));
+        await page.context().addCookies(cookies);
+        console.log('  ✅ Loaded cookies (splash_page=-1, select_store=true)');
+      } else {
+        console.log('  ℹ️  Cookie file not found, proceeding without cookies');
+      }
+    } catch (err) {
+      console.log('  ⚠️  Failed to load cookies:', err instanceof Error ? err.message : String(err));
     }
 
     // ── Step 1: Navigate ───────────────────────────────────────────────────
