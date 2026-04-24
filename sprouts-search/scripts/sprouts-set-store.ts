@@ -297,11 +297,16 @@ export async function setStore(
         const buttons = Array.from(document.querySelectorAll<HTMLElement>('button'))
           .filter(b => /in-?store/i.test(b.textContent ?? ''));
 
+        // Log all button texts for debugging
+        console.log('DEBUG: Found in-store buttons:', buttons.map(b => b.textContent?.trim()));
+
         // Prefer a button that contains store information (store number or store name)
         const buttonWithStore = buttons.find(b => {
           const text = b.textContent ?? '';
           return /#\d{3,4}/.test(text) || /Store\s*#/i.test(text) || /\(.+?\)/.test(text);
         });
+
+        console.log('DEBUG: Selected button with store info:', buttonWithStore?.textContent?.trim());
 
         // Fall back to first button with "in-store" text
         const targetButton = buttonWithStore ?? buttons[0];
@@ -317,10 +322,13 @@ export async function setStore(
     };
 
     console.log(`\n✅ Done! Store button: "${finalButtonText}"`);
+    console.log(`   Parsed store number: ${result.storeNum}`);
+    console.log(`   Parsed store name: ${result.storeName}`);
     if (storeNum && result.storeNum === storeNum) {
       console.log(`✅ Confirmed Store #${storeNum} is active`);
     } else if (storeNum) {
       console.log(`⚠️  Could not confirm store #${storeNum} — check screenshot`);
+      console.log(`   Expected: "${storeNum}", Got: "${result.storeNum}"`);
     }
 
     return result;
