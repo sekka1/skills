@@ -55,6 +55,24 @@ export async function setStore(
     await sleep(SLEEP_MS);
     console.log('  ✅', page.url());
 
+    // ── Step 1a: Handle cookie consent if present ──────────────────────────
+    console.log('Step 1a: Checking for cookie consent popup...');
+    const cookieButton = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll<HTMLElement>('button'));
+      const acceptBtn = buttons.find(b => /accept cookies/i.test(b.textContent ?? ''));
+      if (acceptBtn) {
+        acceptBtn.click();
+        return true;
+      }
+      return false;
+    });
+    if (cookieButton) {
+      await sleep(1000);
+      console.log('  ✅ Accepted cookies');
+    } else {
+      console.log('  ℹ️  No cookie popup found');
+    }
+
     // ── Step 2: Click store mode button ────────────────────────────────────
     console.log('Step 2: Clicking store mode button ...');
     await page.waitForFunction(
@@ -240,20 +258,87 @@ export async function setStore(
 
     if (!rect8) throw new Error('"Set as my store" button not found');
     await sleep(500); // let scrollIntoView settle before clicking
-    await page.mouse.click(rect8.x, rect8.y);
+
+    // Click the button element directly (triggers React onClick handler)
+    const clicked = await page.evaluate((targetStoreNum: string | null): boolean => {
+      const btns = Array.from(document.querySelectorAll<HTMLElement>('button')).filter(b =>
+        /set as my store/i.test(b.textContent ?? '')
+      );
+      let target: HTMLElement | null = null;
+      if (targetStoreNum) {
+        for (const btn of btns) {
+          let el: HTMLElement | null = btn.parentElement;
+          for (let i = 0; i < 15; i++) {
+            if (!el) break;
+            const t = el.textContent ?? '';
+            const storeMatches = (t.match(/Store #\d+/g) ?? []);
+            if (t.includes(`#${targetStoreNum}`)) {
+              const otherStores = storeMatches.filter(m => !m.includes(targetStoreNum));
+              if (otherStores.length === 0) {
+                target = btn;
+                break;
+              }
+            }
+            el = el.parentElement;
+          }
+          if (target) break;
+        }
+      }
+      if (!target) target = btns[0] ?? null;
+      if (!target) return false;
+
+      // Click the button element directly to trigger React handler
+      target.click();
+      return true;
+    }, storeNum);
+
+    if (!clicked) throw new Error('Failed to click "Set as my store" button');
+
     await sleep(SLEEP_MS);
     await screenshot(page, 'step8-done');
     console.log('  ✅ "Set as my store" clicked!');
 
-    // ── Step 8a: Close the store selection modal ───────────────────────────
-    console.log('Step 8a: Closing store selection modal...');
-    await sleep(1000); // wait for store to be set
+    //  Step 8a: Close modal using the X button ───────────────────────────────
+    console.log('Step 8a: Closing modal with X button...');
 
-    // Try to close the modal by pressing Escape
-    await page.keyboard.press('Escape');
-    await sleep(1000);
+    // Try multiple approaches to close the modal
+    const modalClosed = await page.evaluate(() => {
+      // Approach 1: Look for X or Close button
+      const closeButtons = Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'));
+      const closeBtn = closeButtons.find(b => {
+        const text = b.textContent?.trim() || '';
+        const ariaLabel = b.getAttribute('aria-label') || '';
+        return text === 'Close' || text === '×' || text === 'X' ||
+               ariaLabel.toLowerCase().includes('close');
+      });
+
+      if (closeBtn) {
+        closeBtn.click();
+        return { method: 'close-button', success: true };
+      }
+
+      // Approach 2: Click outside the modal (on backdrop)
+      const backdrop = document.querySelector('[role="presentation"], .modal-backdrop, [data-testid="modal-backdrop"]');
+      if (backdrop && backdrop instanceof HTMLElement) {
+        backdrop.click();
+        return { method: 'backdrop', success: true };
+      }
+
+      return { method: 'none', success: false };
+    });
+
+    await sleep(2000);
+    console.log(`  Closed modal via: ${JSON.stringify(modalClosed)}`);
+
+    // If that didn't work, try Escape as fallback
+    if (!modalClosed.success) {
+      console.log('  ⚠️  Trying Escape key as fallback...');
+      await page.keyboard.press('Escape');
+      await sleep(1000);
+    }
+
     await screenshot(page, 'step8a-modal-closed');
-    console.log('  ✅ Modal closed with Escape key');
+    console.log('  ✅ Modal closed');
 
     // ── Step 8b: Click "Shop this store" in map popup ──────────────────────
     console.log('Step 8b: Clicking "Shop this store" in map popup ...');
