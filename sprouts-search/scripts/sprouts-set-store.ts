@@ -291,7 +291,7 @@ export async function setStore(
     }
 
     // ── Verify ─────────────────────────────────────────────────────────────
-    const finalButtonText: string = await page.evaluate(
+    const storeInfo = await page.evaluate(
       () => {
         // Find all buttons with "in-store" text
         const buttons = Array.from(document.querySelectorAll<HTMLElement>('button'))
@@ -310,14 +310,41 @@ export async function setStore(
 
         // Fall back to first button with "in-store" text
         const targetButton = buttonWithStore ?? buttons[0];
+        const buttonText = targetButton?.textContent?.replace(/\s+/g, ' ').trim() ?? '(check screenshot)';
 
-        return targetButton?.textContent?.replace(/\s+/g, ' ').trim() ?? '(check screenshot)';
+        // Also try to find store info in nearby elements or page content
+        // Look for elements that might contain the store address or number
+        let storeContext = '';
+        if (targetButton) {
+          // Check parent elements for store info
+          let parent: HTMLElement | null = targetButton.parentElement;
+          for (let i = 0; i < 5 && parent; i++) {
+            const parentText = parent.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+            if (parentText.length < 500 && (/#\d{3,4}/.test(parentText) || /store #/i.test(parentText))) {
+              storeContext = parentText;
+              console.log('DEBUG: Found store info in parent element:', storeContext.substring(0, 200));
+              break;
+            }
+            parent = parent.parentElement;
+          }
+        }
+
+        return { buttonText, storeContext };
       }
     );
 
+    const finalButtonText = storeInfo.buttonText;
+
+    // Try to parse from button text first, then from context if needed
+    let parsedStoreNum = parseStoreNumber(finalButtonText);
+    if (!parsedStoreNum && storeInfo.storeContext) {
+      console.log('   Trying to parse store number from context...');
+      parsedStoreNum = parseStoreNumber(storeInfo.storeContext);
+    }
+
     const result: StoreResult = {
-      storeNum: parseStoreNumber(finalButtonText),
-      storeName: parseStoreName(finalButtonText),
+      storeNum: parsedStoreNum,
+      storeName: parseStoreName(finalButtonText) || parseStoreName(storeInfo.storeContext),
       buttonText: finalButtonText,
     };
 
