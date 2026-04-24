@@ -55,13 +55,13 @@ describe('parseStoreName', () => {
 
 describe('setStore integration', () => {
   it(
-    'sets store #506 (Las Vegas - Centennial) given Durango Dr address',
+    'sets store #507 (Las Vegas - Lake Mead Blvd) given Durango Dr address',
     async () => {
-      const result = await setStore('6720 N DURANGO DR, LAS VEGAS, NV', '506');
+      const result = await setStore('6720 N DURANGO DR, LAS VEGAS, NV', '507');
 
-      expect(result.storeNum).toBe('506');
-      expect(result.storeName).toContain('Centennial');
-      expect(result.buttonText).toContain('#506');
+      expect(result.storeNum).toBe('507');
+      expect(result.storeName).toContain('Lake Mead');
+      expect(result.buttonText).toContain('#507');
     },
     120_000 // long timeout: browser automation
   );

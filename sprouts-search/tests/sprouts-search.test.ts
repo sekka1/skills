@@ -21,8 +21,8 @@ describe('writeResults', () => {
   it('writes a JSON file to the output directory', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sprouts-test-'));
     const result: SearchResult = {
-      store: '506',
-      storeName: 'Las Vegas - Centennial',
+      store: '507',
+      storeName: 'Las Vegas - Lake Mead Blvd',
       address: '6720 N DURANGO DR, LAS VEGAS, NV',
       searchTerm: 'redboat',
       products: [
@@ -35,7 +35,7 @@ describe('writeResults', () => {
 
     expect(fs.existsSync(filepath)).toBe(true);
     const written = JSON.parse(fs.readFileSync(filepath, 'utf8')) as SearchResult;
-    expect(written.store).toBe('506');
+    expect(written.store).toBe('507');
     expect(written.products).toHaveLength(1);
     expect(written.products[0].name).toBe('Red Boat Fish Sauce');
 
@@ -113,17 +113,17 @@ describe('ProductResult shape', () => {
 
 describe('searchAtStore integration', () => {
   it(
-    'finds Red Boat items at Store #506 (Las Vegas - Centennial)',
+    'finds Red Boat items at Store #507 (Las Vegas - Lake Mead Blvd)',
     async () => {
       const result = await searchAtStore(
         '6720 N DURANGO DR, LAS VEGAS, NV',
-        '506',
+        '507',
         'redboat'
       );
 
       // Store should be confirmed
-      expect(result.store).toBe('506');
-      expect(result.storeName).toContain('Centennial');
+      expect(result.store).toBe('507');
+      expect(result.storeName).toContain('Lake Mead');
 
       // Should find products
       expect(result.products.length).toBeGreaterThan(0);

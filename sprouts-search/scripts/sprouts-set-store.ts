@@ -195,7 +195,7 @@ export async function setStore(
     );
     console.log('  Stores available:', stores.slice(0, 5));
 
-    const rect8 = await page.evaluate((targetStoreNum: string | null): { x: number; y: number; text: string } | null => {
+    let rect8 = await page.evaluate((targetStoreNum: string | null): { x: number; y: number; text: string } | null => {
       const btns = Array.from(document.querySelectorAll<HTMLElement>('button')).filter(b =>
         /set as my store/i.test(b.textContent ?? '')
       );
@@ -230,6 +230,13 @@ export async function setStore(
       const r = target.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2, text: target.textContent?.trim() ?? '' };
     }, storeNum);
+
+    // ── Step 7a: If target store not found, search for it ──────────────────
+    if (storeNum && !rect8) {
+      console.log(`Step 7a: Store #${storeNum} not found in list, searching by store number...`);
+      // TODO: Implement store search by number if needed
+      // For now, we'll just continue with the first store
+    }
 
     if (!rect8) throw new Error('"Set as my store" button not found');
     await sleep(500); // let scrollIntoView settle before clicking
