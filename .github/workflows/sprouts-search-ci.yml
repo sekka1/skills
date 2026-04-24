@@ -72,17 +72,40 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Chrome
-        run: |
-          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
 
       - name: Start Chrome with remote debugging
         run: |
-          google-chrome-stable --remote-debugging-port=9222 --headless --no-sandbox --disable-gpu --disable-dev-shm-usage &
-          sleep 5
+          # Start Chrome with CDP for Playwright to connect to
+          google-chrome-stable \
+            --remote-debugging-port=9222 \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --disable-setuid-sandbox \
+            --disable-background-networking \
+            --disable-default-apps \
+            --disable-extensions \
+            --disable-sync \
+            --disable-translate \
+            --metrics-recording-only \
+            --mute-audio \
+            --no-first-run \
+            --safebrowsing-disable-auto-update \
+            --user-data-dir=/tmp/chrome-test-profile &
+          # Wait for Chrome to be ready
+          for i in {1..30}; do
+            if curl -s http://localhost:9222/json/version > /dev/null 2>&1; then
+              echo "Chrome is ready!"
+              break
+            fi
+            echo "Waiting for Chrome to start... ($i/30)"
+            sleep 1
+          done
+          # Verify Chrome is running
+          curl -s http://localhost:9222/json/version | jq '.'
 
       - name: Run integration tests
         run: npm run test:integration
