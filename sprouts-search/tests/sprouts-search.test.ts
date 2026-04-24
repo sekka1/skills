@@ -170,4 +170,36 @@ describe('searchAtStore integration', () => {
     },
     180_000
   );
+
+  it(
+    'finds Red Boat 40 N Fish Sauce at Store #449 (Hayward, CA)',
+    async () => {
+      const result = await searchAtStore(
+        '26207 Mission Blvd, Hayward, CA 94544',
+        '449',
+        'red boat'
+      );
+
+      // Store should be confirmed
+      expect(result.store).toBe('449');
+      expect(result.address).toBe('26207 Mission Blvd, Hayward, CA 94544');
+
+      // Should find products
+      expect(result.products.length).toBeGreaterThan(0);
+
+      // Look for Red Boat 40 N Fish Sauce specifically
+      const targetProduct = result.products.find(p =>
+        p.name.toLowerCase().includes('red boat') &&
+        p.name.toLowerCase().includes('40') &&
+        p.name.toLowerCase().includes('fish sauce')
+      );
+
+      // This test verifies the item is found
+      expect(targetProduct).toBeDefined();
+      expect(targetProduct?.name).toContain('Red Boat');
+      expect(targetProduct?.name).toContain('40');
+      expect(targetProduct?.available).toBe(true);
+    },
+    180_000
+  );
 });
