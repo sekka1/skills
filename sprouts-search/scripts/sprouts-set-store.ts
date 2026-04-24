@@ -195,7 +195,7 @@ export async function setStore(
     );
     console.log('  Stores available:', stores.slice(0, 5));
 
-    let rect8 = await page.evaluate((targetStoreNum: string | null): { x: number; y: number; text: string } | null => {
+    const rect8 = await page.evaluate((targetStoreNum: string | null): { x: number; y: number; text: string } | null => {
       const btns = Array.from(document.querySelectorAll<HTMLElement>('button')).filter(b =>
         /set as my store/i.test(b.textContent ?? '')
       );
@@ -328,7 +328,7 @@ export async function setStore(
           '8' // Phoenix - Indian School Rd. is Store #8 (the default)
         ).catch(() => null)
       ]);
-    } catch (err) {
+    } catch {
       // If both timeout, continue anyway - we'll verify below
       console.log('  ⚠️  Page update detection timed out - proceeding to verification');
     }
