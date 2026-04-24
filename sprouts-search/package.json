@@ -4,9 +4,9 @@
   "description": "Search Sprouts Farmers Market for in-store availability using automated browser scripts",
   "type": "module",
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --testNamePattern='^((?!integration).)*$'",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage --testNamePattern='^((?!integration).)*$'",
     "test:integration": "vitest run --testNamePattern='integration'",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

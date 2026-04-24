@@ -294,7 +294,7 @@ export async function setStore(
     const finalButtonText: string = await page.evaluate(
       () =>
         Array.from(document.querySelectorAll<HTMLElement>('button'))
-          .find(b => /in-?store/i.test(b.textContent ?? '') && /store #/i.test(b.textContent ?? ''))
+          .find(b => /in-?store/i.test(b.textContent ?? ''))
           ?.textContent?.replace(/\s+/g, ' ')
           .trim() ?? '(check screenshot)'
     );
