@@ -118,3 +118,16 @@ Type check:
 ```bash
 npm run typecheck
 ```
+
+## Advanced Documentation
+
+For detailed information about website behavior, known issues, and debugging strategies, see:
+
+- **[knowledge-base.md](knowledge-base.md)** - Root cause analysis, edge cases, and implementation details
+  - Onboarding modal handling
+  - React event system issues
+  - Browser automation challenges
+  - Storage-based verification strategies
+
+This documentation is essential for understanding why the implementation uses specific approaches (synthetic events, localStorage verification, etc.) and for debugging future issues.
+

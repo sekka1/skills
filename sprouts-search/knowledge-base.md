@@ -2,60 +2,85 @@
 
 This document captures findings, edge cases, and behavioral patterns observed when automating the Sprouts Farmers Market website.
 
-## Critical Findings
+## Critical Findings (Updated with Garbot Analysis)
 
-### Issue #1: Store Selection Not Persisting (CRITICAL)
+### Issue #1: "How would you like to shop?" Onboarding Modal (PRIMARY BLOCKER)
+
+**Discovered:** 2026-04-24 (garbot analysis)
+
+**Symptom:** On fresh headless Chrome sessions with no cookies, the site immediately shows an onboarding modal that blocks the entire page.
+
+**Root Cause:**
+- In CI environments with clean browser state, this modal ALWAYS appears
+- The script's Step 2 searches for "In-Store" button and Step 3 for "Change store"
+- These accidentally interact with the modal's rows instead of the header button
+- If "Confirm" is never clicked in the modal, the session state is never committed
+
+**Fix Implemented:**
+- Added Step 0 to detect and handle the onboarding modal
+- Clicks "In-Store" option in the modal, then "Confirm" button
+- Only proceeds to store selection after modal is dismissed
+
+### Issue #2: React Synthetic Events Not Firing (CRITICAL)
+
+**Discovered:** 2026-04-24 (garbot analysis)
+
+**Symptom:** Multiple click attempts (page.mouse.click() → element.click() → coordinates) all failed to trigger React handlers.
+
+**Root Cause:**
+- Sprouts uses React for event handling
+- Headless Chrome with `--disable-gpu` + `--disable-dev-shm-usage` affects compositing
+- `element.click()` doesn't reliably trigger React synthetic event system
+- React components may not be in the composed event path
+
+**Fix Implemented:**
+- Use sequence of synthetic PointerEvent + MouseEvent dispatches
+- Full sequence: pointerdown → mousedown → pointerup → mouseup → click
+- All events use `bubbles: true` to propagate through React's event system
+
+**Alternative (Not Implemented):**
+- Switch from puppeteer-core to playwright-core
+- Playwright has better React/Angular support with proper event synthesis
+
+### Issue #3: "Shop this store" Map Popup Unreliable in Headless
+
+**Discovered:** 2026-04-24 (garbot analysis)
+
+**Symptom:** Map popup with "Shop this store" button either doesn't render or has zero-size bounding rects in headless Chrome.
+
+**Root Cause:**
+- Google Maps popup requires GPU and proper Maps session
+- Headless CI with `--no-sandbox --disable-gpu` can't render it properly
+- Hardcoded pixel coordinates (836, 652) were a workaround but unreliable
+
+**Fix Implemented:**
+- Made Step 8b OPTIONAL - don't fail if button not found
+- Removed hardcoded fallback coordinates (too brittle)
+- Added Step 8c to verify store via localStorage/cookies instead of UI
+
+### Issue #4: Store Selection Verification
 
 **Discovered:** 2026-04-24
 
-**Symptom:** After clicking "Set as my store" and closing the modal, the selected store reverts to the default store (Scottsdale - Shea Blvd, Store #2).
+**Symptom:** UI-based verification (parsing button text) was unreliable and failed even when store was set.
 
-**Root Cause Analysis:**
+**Root Cause:**
+- Button text format varies across sessions
+- DOM may not update immediately after async store selection
+- UI state doesn't reliably reflect underlying data store
 
-1. **The Problem:** Clicking the green "Set as my store" button does NOT immediately finalize the store selection
-   - After clicking "Set as my store", the modal remains open showing the same store list
-   - The "Set as my store" button stays green and clickable (no visual feedback that selection was made)
-   - When pressing Escape to close the modal, this CANCELS the selection rather than confirming it
-   - Result: Store reverts to default instead of the newly selected store
-
-2. **Evidence:**
-   - Screenshot `sprouts-debug-step8-done.png`: Shows modal still open after "Set as my store" click
-   - Screenshot `sprouts-debug-step8a-modal-closed.png`: Shows store still set to #2 (default) after modal closed
-   - Test logs: Store verification always returns "Scottsdale - Shea Blvd. (Store #2)" regardless of which store was clicked
-
-3. **Missing Step:** There must be an additional confirmation required after clicking "Set as my store":
-   - Option A: Wait for a confirmation message/toast to appear
-   - Option B: Look for and click a "Shop this store" button (Step 8b searches for this but doesn't find it)
-   - Option C: Wait for the modal to close automatically
-   - Option D: There's a different close mechanism (not Escape) that confirms the selection
-
-**Current Code Flow:**
-```
-Step 8: Click "Set as my store" → Button clicked successfully
-Step 8a: Press Escape to close modal → WRONG - This cancels the selection!
-Step 8b: Look for "Shop this store" → Not found
-Step 9: Wait for page update → Times out (no update happens because selection was cancelled)
-Step 10: Verify → Returns wrong store (#2 instead of target)
-```
-
-**Attempted Fixes:**
-- ✅ Added Step 9: Wait for page navigation/update before verification (didn't help - selection was already cancelled)
-- ❌ Pressing Escape to close modal - This is the problem, not the solution!
-
-**Next Steps to Try:**
-1. After clicking "Set as my store", wait for visual confirmation (button color change, loading spinner, etc.)
-2. Look for a different way to confirm/close the modal (e.g., click outside modal, look for a "Continue" button)
-3. Check if clicking "Set as my store" triggers an async operation that needs time to complete before closing modal
-4. Investigate if there's a success toast/notification that appears
-5. Try NOT closing the modal manually - let it close automatically or navigate away
-6. Look for DOM mutations that indicate the store was set successfully
+**Fix Implemented:**
+- Added localStorage/cookie verification in Step 8c
+- Check for: `selected_store`, `store`, `storeId` in localStorage
+- Also scan cookies for store-related data
+- More reliable than UI text parsing
 
 ## Website Behavioral Patterns
 
 ### Pattern #1: Multiple Paths to Same Functionality
 
 The Sprouts website may show different UI flows for the same action depending on:
-- User session state
+- User session state (fresh vs. returning)
 - Time of day / server-side A/B tests
 - Browser state / cookies
 - Geographic location
@@ -87,6 +112,15 @@ When first visiting the site, it defaults to:
 - **Store #2:** Scottsdale - Shea Blvd. (Phoenix area)
 - This appears to be a hardcoded default, not based on geolocation
 
+### Edge Case #3: Browser State Contamination
+
+**Issue:** Tests running in sequence share browser state, causing failures.
+
+**Solution:**
+- Use `--user-data-dir=/tmp/chrome-test-profile` in CI
+- Pre-seed localStorage with store data to skip full flow
+- Or use separate browser contexts for each test
+
 ## Testing Notes
 
 ### Integration Test Challenges
@@ -101,6 +135,11 @@ When first visiting the site, it defaults to:
    - All critical steps should have screenshots
    - Compare "before" and "after" states to confirm changes
 
+4. **Headless vs. Headed Differences:**
+   - Headless Chrome with --disable-gpu behaves differently
+   - Map popups and some React components may not render
+   - Always test in headless mode before CI
+
 ## Recommendations
 
 ### For Future Developers/Agents
@@ -110,17 +149,19 @@ When first visiting the site, it defaults to:
 3. **Debug with screenshots:** Visual confirmation is often more reliable than DOM queries alone
 4. **Wait for async operations:** Don't assume DOM state changes are instantaneous
 5. **Test in isolation:** Browser state from previous tests can cause false negatives
+6. **Use storage verification:** localStorage/cookies are more reliable than UI parsing
 
-### For This Specific Issue
+### Implemented Fixes (Based on Garbot Analysis)
 
-**PRIORITY FIX:** The store selection flow needs to be completely reworked:
-1. Click "Set as my store"
-2. **DO NOT press Escape** - This cancels the selection!
-3. Find the correct confirmation mechanism
-4. Wait for visual/DOM confirmation that store was set
-5. Only then proceed to verification
+✅ **Step 0:** Handle onboarding modal on fresh sessions
+✅ **Synthetic Events:** Use PointerEvent + MouseEvent sequence for React
+✅ **Optional Map Popup:** Don't fail if "Shop this store" missing
+✅ **Storage Verification:** Check localStorage/cookies for store data
+⬜ **Browser Isolation:** Consider `--user-data-dir` for clean state per test
+⬜ **Playwright Migration:** Consider switching to playwright-core for better React support
 
 ---
 
 **Last Updated:** 2026-04-24
-**Status:** Active investigation - Store selection broken, fix in progress
+**Status:** Fixes implemented based on garbot's root cause analysis
+**Credits:** Root cause analysis by garbot

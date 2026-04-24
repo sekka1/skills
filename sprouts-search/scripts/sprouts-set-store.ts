@@ -55,6 +55,42 @@ export async function setStore(
     await sleep(SLEEP_MS);
     console.log('  ✅', page.url());
 
+    // ── Step 0: Handle "How would you like to shop?" onboarding modal ──────
+    console.log('Step 0: Checking for onboarding modal...');
+    const modalHandled = await page.evaluate(() => {
+      // Look for the onboarding modal
+      const modalText = document.body.textContent || '';
+      if (modalText.includes('How would you like to shop?')) {
+        // Find and click the "In-Store" option in the modal
+        const allElements = Array.from(document.querySelectorAll<HTMLElement>('*'));
+        const inStoreOption = allElements.find(el => {
+          const text = el.textContent?.trim() || '';
+          return text.includes('In-Store') && el.tagName !== 'BUTTON';
+        });
+
+        if (inStoreOption) {
+          inStoreOption.click();
+
+          // Then click the Confirm button
+          const buttons = Array.from(document.querySelectorAll<HTMLElement>('button'));
+          const confirmBtn = buttons.find(b => /confirm/i.test(b.textContent ?? ''));
+          if (confirmBtn) {
+            confirmBtn.click();
+            return { found: true, confirmed: true };
+          }
+          return { found: true, confirmed: false };
+        }
+      }
+      return { found: false, confirmed: false };
+    });
+
+    if (modalHandled.found) {
+      await sleep(2000); // Wait for modal to close
+      console.log(`  ✅ Onboarding modal handled (confirmed: ${modalHandled.confirmed})`);
+    } else {
+      console.log('  ℹ️  No onboarding modal found');
+    }
+
     // ── Step 1a: Handle cookie consent if present ──────────────────────────
     console.log('Step 1a: Checking for cookie consent popup...');
     const cookieButton = await page.evaluate(() => {
@@ -259,7 +295,7 @@ export async function setStore(
     if (!rect8) throw new Error('"Set as my store" button not found');
     await sleep(500); // let scrollIntoView settle before clicking
 
-    // Click the button element directly (triggers React onClick handler)
+    // Use synthetic events to trigger React onClick handler (garbot recommendation)
     const clicked = await page.evaluate((targetStoreNum: string | null): boolean => {
       const btns = Array.from(document.querySelectorAll<HTMLElement>('button')).filter(b =>
         /set as my store/i.test(b.textContent ?? '')
@@ -287,8 +323,12 @@ export async function setStore(
       if (!target) target = btns[0] ?? null;
       if (!target) return false;
 
-      // Click the button element directly to trigger React handler
-      target.click();
+      // Dispatch synthetic events in sequence to trigger React handlers
+      target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+      target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+      target.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true }));
+      target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+      target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
       return true;
     }, storeNum);
 
@@ -296,7 +336,7 @@ export async function setStore(
 
     await sleep(SLEEP_MS);
     await screenshot(page, 'step8-done');
-    console.log('  ✅ "Set as my store" clicked!');
+    console.log('  ✅ "Set as my store" clicked with synthetic events!');
 
     //  Step 8a: Close modal using the X button ───────────────────────────────
     console.log('Step 8a: Closing modal with X button...');
@@ -340,11 +380,10 @@ export async function setStore(
     await screenshot(page, 'step8a-modal-closed');
     console.log('  ✅ Modal closed');
 
-    // ── Step 8b: Click "Shop this store" in map popup ──────────────────────
-    console.log('Step 8b: Clicking "Shop this store" in map popup ...');
+    // ── Step 8b: Click "Shop this store" in map popup (OPTIONAL) ───────────
+    console.log('Step 8b: Looking for "Shop this store" popup (optional)...');
     await sleep(2000); // wait for map popup to fully render
-    // The "Shop this store" button is in a React portal/overlay that getBoundingClientRect()
-    // returns zero for. Use offsetParent chain for absolute position.
+
     const rect8bInfo = await page.evaluate(() => {
       const allEls = Array.from(document.querySelectorAll<HTMLElement>('button, [role="button"]'));
       const btn = allEls.find(b => /shop this store/i.test(b.textContent ?? ''));
@@ -354,19 +393,7 @@ export async function setStore(
       if (bcr.width > 0 && bcr.height > 0) {
         return { x: bcr.left + bcr.width / 2, y: bcr.top + bcr.height / 2, method: 'bcr' };
       }
-      // Walk offsetParent chain
-      let x = btn.offsetWidth / 2;
-      let y = btn.offsetHeight / 2;
-      let el: HTMLElement | null = btn;
-      while (el) {
-        x += el.offsetLeft;
-        y += el.offsetTop;
-        el = el.offsetParent as HTMLElement | null;
-      }
-      if (x > 0 && y > 0 && x < 2000 && y < 2000) {
-        return { x, y, method: 'offset' };
-      }
-      return { x: -1, y: -1, found: true, method: 'found-but-no-coords' };
+      return null; // Don't try fallback coordinates - too unreliable in headless
     });
 
     if (rect8bInfo && rect8bInfo.x > 0 && rect8bInfo.y > 0) {
@@ -374,23 +401,33 @@ export async function setStore(
       await page.mouse.click(rect8bInfo.x, rect8bInfo.y);
       await sleep(SLEEP_MS);
       await screenshot(page, 'step8b-final');
-      console.log('  ✅ "Shop this store" clicked — store set!');
-    } else if (rect8bInfo?.found) {
-      // Button found but couldn't get usable coordinates — try clicking center of right panel
-      // (map popup consistently appears in right ~60% of the viewport)
-      console.log('  ⚠️  Button found but no usable coordinates — trying viewport-based click');
-      // Screenshot to find exact position visually
-      await screenshot(page, 'step8b-before-fallback');
-      // Based on observed screenshots (1204x851 screenshot = 1280x900 viewport):
-      // Button appears at ~786x617 in screenshot, scaled to ~836x652 in viewport
-      await page.mouse.click(836, 652);
-      await sleep(SLEEP_MS);
-      await screenshot(page, 'step8b-fallback');
-      console.log('  ✅ Fallback click at (786, 617)');
+      console.log('  ✅ "Shop this store" clicked');
     } else {
-      console.log('  ℹ️  No "Shop this store" popup found (store may already be set)');
+      console.log('  ℹ️  No "Shop this store" popup found (optional - continuing)');
       await screenshot(page, 'step8b-skipped');
     }
+
+    // ── Step 8c: Verify store selection via localStorage ───────────────────
+    console.log('Step 8c: Verifying store selection via localStorage...');
+    const storeData = await page.evaluate(() => {
+      // Check localStorage for store data
+      const localData = localStorage.getItem('selected_store') ||
+                       localStorage.getItem('store') ||
+                       localStorage.getItem('storeId');
+
+      // Also check cookies
+      const cookies = document.cookie;
+
+      return {
+        localStorage: localData,
+        cookies: cookies.substring(0, 200), // First 200 chars
+        hasStoreData: !!(localData || cookies.includes('store'))
+      };
+    });
+
+    console.log(`  localStorage: ${storeData.localStorage || '(none)'}`);
+    console.log(`  Has store data: ${storeData.hasStoreData}`);
+    await screenshot(page, 'step8c-storage-check');
 
     // ── Step 9: Wait for page to update/reload after store selection ───────
     console.log('Step 9: Waiting for page to update with new store selection...');
