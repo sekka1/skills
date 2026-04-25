@@ -1,0 +1,120 @@
+name: Sprouts Search CI
+
+on:
+  pull_request:
+    paths:
+      - 'sprouts-search/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'sprouts-search/**'
+
+jobs:
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sprouts-search
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sprouts-search/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run type checking
+        run: npm run typecheck
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Generate coverage report
+        run: npm run test:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          directory: sprouts-search/coverage
+          flags: sprouts-search
+          fail_ci_if_error: false
+
+  integration-test:
+    name: Integration Test (E2E)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sprouts-search
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sprouts-search/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Start Chrome with remote debugging
+        run: |
+          # Start Chrome with CDP for Playwright to connect to
+          google-chrome-stable \
+            --remote-debugging-port=9222 \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --disable-setuid-sandbox \
+            --disable-background-networking \
+            --disable-default-apps \
+            --disable-extensions \
+            --disable-sync \
+            --disable-translate \
+            --metrics-recording-only \
+            --mute-audio \
+            --no-first-run \
+            --safebrowsing-disable-auto-update \
+            --user-data-dir=/tmp/chrome-test-profile &
+          # Wait for Chrome to be ready
+          for i in {1..30}; do
+            if curl -s http://localhost:9222/json/version > /dev/null 2>&1; then
+              echo "Chrome is ready!"
+              break
+            fi
+            echo "Waiting for Chrome to start... ($i/30)"
+            sleep 1
+          done
+          # Verify Chrome is running
+          curl -s http://localhost:9222/json/version | jq '.'
+
+      - name: Run integration tests
+        run: npm run test:integration
+        timeout-minutes: 10
+
+      - name: Upload test artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-screenshots
+          path: sprouts-search/sprouts-debug-*.png
+          if-no-files-found: ignore

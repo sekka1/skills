@@ -1,0 +1,37 @@
+{
+  "name": "sprouts-search",
+  "version": "1.0.0",
+  "description": "Search Sprouts Farmers Market for in-store availability using automated browser scripts",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run --testNamePattern='^((?!integration).)*$'",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage --testNamePattern='^((?!integration).)*$'",
+    "test:integration": "vitest run --testNamePattern='integration'",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "sprouts",
+    "grocery",
+    "availability",
+    "puppeteer",
+    "automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "@vitest/coverage-v8": "^2.0.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.0",
+    "typescript-eslint": "^8.59.0",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "playwright-core": "^1.49.0"
+  }
+}

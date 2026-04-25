@@ -1,0 +1,42 @@
+[
+  {
+    "name": "splash_page",
+    "value": "-1",
+    "domain": ".sprouts.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "select_store",
+    "value": "true",
+    "domain": ".sprouts.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "__Host-instacart_sid",
+    "value": "placeholder_session_id",
+    "domain": "shop.sprouts.com",
+    "path": "/",
+    "expires": 1748476800,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "None"
+  },
+  {
+    "name": "_instacart_session_id",
+    "value": "placeholder_instacart_session",
+    "domain": ".sprouts.com",
+    "path": "/",
+    "expires": 1748476800,
+    "httpOnly": true,
+    "secure": false,
+    "sameSite": "Lax"
+  }
+]

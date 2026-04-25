@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Test coverage
+coverage/
+
+# Screenshots and debug files
+sprouts-debug-*.png
+
+# Results directory
+sprouts-results/
+
+# Temporary files
+*.log
+*.tmp
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
